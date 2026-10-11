@@ -314,3 +314,20 @@ export async function issueDraft(ctx: TenantContext, invoiceId: string) {
 }
 
 export { view as invoiceViewPermission, manage as invoiceManagePermission };
+
+/** Bulk reassignment of the responsible employee. */
+export async function bulkAssign(ctx: TenantContext, direction: InvoiceDirection, ids: string[], userId: string | null) {
+  assertCan(ctx, manage(direction));
+  if (ids.length === 0) throw new AppError("Select at least one row.");
+  if (ids.length > 500) throw new AppError("Select at most 500 rows at a time.");
+  return withTenant(ctx.businessId, async (tx) => {
+    await assertMember(tx, ctx.businessId, userId);
+    const rows = await tx.invoice.findMany({ where: { id: { in: ids }, direction }, select: { id: true, invoiceNumber: true, assignedUserId: true } });
+    if (rows.length !== new Set(ids).size) throw new NotFoundError("One or more invoices");
+    await tx.invoice.updateMany({ where: { id: { in: rows.map((r) => r.id) } }, data: { assignedUserId: userId } });
+    for (const r of rows) {
+      await audit(tx, { businessId: ctx.businessId, actorUserId: ctx.userId, action: "invoice.reassigned", entityType: "invoice", entityId: r.id, summary: `${r.invoiceNumber} reassigned`, before: { assignedUserId: r.assignedUserId }, after: { assignedUserId: userId } });
+    }
+    return rows.length;
+  });
+}

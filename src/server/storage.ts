@@ -13,7 +13,7 @@ export interface StorageProvider {
 }
 
 function rootDir() {
-  return path.resolve(process.env.STORAGE_DIR || "./storage");
+  return path.resolve(/*turbopackIgnore: true*/ process.cwd(), process.env.STORAGE_DIR || "storage");
 }
 
 /** Keys are generated server-side ("<businessId>/<uuid>.<ext>"); never derived from user input. */
@@ -21,7 +21,7 @@ const KEY_RE = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(pdf|png|jpg|webp)$/;
 
 function resolveKey(key: string) {
   if (!KEY_RE.test(key)) throw new Error("Invalid storage key");
-  const full = path.resolve(rootDir(), key);
+  const full = path.resolve(/*turbopackIgnore: true*/ rootDir(), key);
   if (!full.startsWith(rootDir() + path.sep)) throw new Error("Invalid storage path");
   return full;
 }

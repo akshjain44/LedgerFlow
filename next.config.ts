@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const securityHeaders = [
@@ -9,6 +10,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // This app lives inside another repository; pin the root so the parent project is never picked up.
+  turbopack: { root: path.resolve(__dirname) },
+  outputFileTracingRoot: path.resolve(__dirname),
   serverExternalPackages: ["@prisma/client", "nodemailer"],
   experimental: {
     serverActions: { bodySizeLimit: "12mb" },

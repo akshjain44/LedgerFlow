@@ -1,0 +1,971 @@
+// LedgerFlow database schema.
+//
+// Conventions
+// - Every tenant-owned table carries `business_id`. Row Level Security
+//   (see migrations/*_security) restricts every such table to the business
+//   set in the transaction-local `app.business_id` setting. Application code
+//   reaches tenant data only through `withTenant()` (src/server/db.ts).
+// - Money is NUMERIC(14,2). Domain logic converts to integer paise (bigint);
+//   floats are never used for authoritative amounts.
+// - Business calendar dates (invoice date, due date, payment date, promised
+//   date) are DATE columns. Instants are TIMESTAMPTZ.
+// - Financial history is never deleted: payments, allocations and
+//   adjustments are reversed via status + reversal metadata.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------- enums
+
+enum Role {
+  owner
+  finance_manager
+  staff
+
+  @@map("role")
+}
+
+enum MembershipStatus {
+  active
+  suspended
+
+  @@map("membership_status")
+}
+
+enum CounterpartyStatus {
+  active
+  on_hold
+  inactive
+
+  @@map("counterparty_status")
+}
+
+enum InvoiceDirection {
+  receivable
+  payable
+
+  @@map("invoice_direction")
+}
+
+// Lifecycle state only. "Paid", "partially paid" and "overdue" are derived
+// from amounts and dates (src/domain/invoiceStatus.ts), never stored.
+enum InvoiceLifecycle {
+  draft
+  open
+  void
+
+  @@map("invoice_lifecycle")
+}
+
+enum PaymentPriority {
+  low
+  normal
+  high
+  critical
+
+  @@map("payment_priority")
+}
+
+enum PaymentDirection {
+  received
+  made
+
+  @@map("payment_direction")
+}
+
+enum RecordStatus {
+  active
+  reversed
+
+  @@map("record_status")
+}
+
+enum AdjustmentKind {
+  credit_note
+  write_off
+
+  @@map("adjustment_kind")
+}
+
+enum FollowUpType {
+  call
+  email
+  visit
+  review
+  escalation
+  payment_planning
+  other
+
+  @@map("follow_up_type")
+}
+
+enum FollowUpStatus {
+  pending
+  completed
+  cancelled
+
+  @@map("follow_up_status")
+}
+
+enum FollowUpSource {
+  manual
+  system_overdue
+  system_promise
+  escalation
+
+  @@map("follow_up_source")
+}
+
+enum CommunicationChannel {
+  call
+  email
+  whatsapp
+  sms
+  visit
+  note
+
+  @@map("communication_channel")
+}
+
+enum CommunicationDirection {
+  outbound
+  inbound
+
+  @@map("communication_direction")
+}
+
+enum CallOutcome {
+  no_answer
+  unavailable
+  payment_promised
+  part_payment_received
+  payment_completed
+  invoice_dispute
+  delivery_dispute
+  rate_discrepancy
+  cash_flow_difficulty
+  extension_requested
+  refused
+  wrong_contact
+  escalated
+  other
+
+  @@map("call_outcome")
+}
+
+enum PromiseStatus {
+  upcoming
+  kept
+  partially_kept
+  broken
+  cancelled
+
+  @@map("promise_status")
+}
+
+enum DisputeCategory {
+  quantity_mismatch
+  rate_mismatch
+  missing_delivery_docs
+  damaged_goods
+  invoice_discrepancy
+  tax_discrepancy
+  allocation_discrepancy
+  other
+
+  @@map("dispute_category")
+}
+
+enum DisputeStatus {
+  open
+  under_review
+  awaiting_customer
+  awaiting_supplier
+  awaiting_internal
+  resolved
+  closed
+
+  @@map("dispute_status")
+}
+
+enum NotificationPriority {
+  low
+  normal
+  high
+  urgent
+
+  @@map("notification_priority")
+}
+
+enum ReminderJobStatus {
+  pending
+  processing
+  completed
+  cancelled
+  skipped
+  failed
+
+  @@map("reminder_job_status")
+}
+
+enum DeliveryChannel {
+  in_app
+  email
+
+  @@map("delivery_channel")
+}
+
+enum DeliveryStatus {
+  pending
+  delivered
+  failed
+  skipped
+
+  @@map("delivery_status")
+}
+
+enum PlannedPaymentStatus {
+  scheduled
+  completed
+  cancelled
+
+  @@map("planned_payment_status")
+}
+
+enum MessageStatus {
+  prepared
+  sent
+  failed
+
+  @@map("message_status")
+}
+
+enum DocumentKind {
+  invoice
+  supplier_bill
+  purchase_order
+  delivery_challan
+  payment_confirmation
+  dispute_evidence
+  other
+
+  @@map("document_kind")
+}
+
+enum ImportType {
+  customers
+  suppliers
+  receivables
+  payables
+  payments
+
+  @@map("import_type")
+}
+
+enum ImportStatus {
+  previewed
+  completed
+  failed
+
+  @@map("import_status")
+}
+
+enum ImportRowOutcome {
+  created
+  skipped_duplicate
+  skipped_by_user
+  failed
+
+  @@map("import_row_outcome")
+}
+
+// ---------------------------------------------------------------- identity
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  name         String
+  passwordHash String    @map("password_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz
+
+  sessions    Session[]
+  memberships Membership[]
+  resets      PasswordReset[]
+
+  @@map("users")
+}
+
+model Session {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  tokenHash        String   @unique @map("token_hash")
+  activeBusinessId String?  @map("active_business_id") @db.Uuid
+  expiresAt        DateTime @map("expires_at") @db.Timestamptz
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
+}
+
+// Used for login / reset rate limiting. Stores a hash of the email, not the
+// email itself.
+model AuthAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  kind      String
+  keyHash   String   @map("key_hash")
+  success   Boolean
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([kind, keyHash, createdAt])
+  @@map("auth_attempts")
+}
+
+// ---------------------------------------------------------------- tenancy
+
+model Business {
+  id                         String   @id @default(uuid()) @db.Uuid
+  name                       String
+  legalName                  String?  @map("legal_name")
+  businessType               String?  @map("business_type")
+  gstin                      String?
+  address                    String?
+  contactEmail               String?  @map("contact_email")
+  contactPhone               String?  @map("contact_phone")
+  currency                   String   @default("INR")
+  timezone                   String   @default("Asia/Kolkata")
+  defaultCustomerCreditDays  Int      @default(30) @map("default_customer_credit_days")
+  defaultSupplierCreditDays  Int      @default(30) @map("default_supplier_credit_days")
+  isDemo                     Boolean  @default(false) @map("is_demo")
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  settings    BusinessSettings?
+  memberships Membership[]
+  invitations Invitation[]
+
+  @@map("businesses")
+}
+
+model BusinessSettings {
+  businessId                   String   @id @map("business_id") @db.Uuid
+  // ISO weekday numbers, 1 = Monday ... 7 = Sunday.
+  workingDays                  Int[]    @default([1, 2, 3, 4, 5, 6]) @map("working_days")
+  reminderStartHour            Int      @default(9) @map("reminder_start_hour")
+  reminderEndHour              Int      @default(19) @map("reminder_end_hour")
+  // Days relative to due date: negative = before, 0 = on, positive = after.
+  receivableReminderOffsets    Int[]    @default([-3, -1, 0, 1, 3, 7, 15, 30]) @map("receivable_reminder_offsets")
+  payableReminderOffsets       Int[]    @default([-3, -1, 0, 1, 7]) @map("payable_reminder_offsets")
+  remindersEnabled             Boolean  @default(true) @map("reminders_enabled")
+  emailNotificationsEnabled    Boolean  @default(true) @map("email_notifications_enabled")
+  brokenPromiseThreshold       Int      @default(2) @map("broken_promise_threshold")
+  brokenPromiseWindowDays      Int      @default(90) @map("broken_promise_window_days")
+  financeManagerOverdueDays    Int      @default(7) @map("finance_manager_overdue_days")
+  disputeReviewDays            Int      @default(7) @map("dispute_review_days")
+  // 'continue' keeps disputed invoices in the collections queue; 'hold'
+  // de-prioritises them while a documented hold is active.
+  disputePolicy                String   @default("continue") @map("dispute_policy")
+  paymentMethods               String[] @default(["Bank transfer (NEFT/RTGS/IMPS)", "UPI", "Cheque", "Cash", "Other"]) @map("payment_methods")
+  invoicePrefix                String?  @map("invoice_prefix")
+  priorityWeights              Json?    @map("priority_weights")
+  updatedAt                    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@map("business_settings")
+}
+
+model Membership {
+  id          String           @id @default(uuid()) @db.Uuid
+  businessId  String           @map("business_id") @db.Uuid
+  userId      String           @map("user_id") @db.Uuid
+  role        Role
+  // Explicit grants for staff. Owners / finance managers get role defaults.
+  permissions String[]         @default([])
+  status      MembershipStatus @default(active)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Invitation {
+  id          String    @id @default(uuid()) @db.Uuid
+  businessId  String    @map("business_id") @db.Uuid
+  email       String
+  role        Role
+  permissions String[]  @default([])
+  tokenHash   String    @unique @map("token_hash")
+  invitedById String    @map("invited_by_id") @db.Uuid
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("invitations")
+}
+
+// ---------------------------------------------------------------- counterparties
+
+// One record per external business. A counterparty can be a customer, a
+// supplier, or both, without duplication.
+model Counterparty {
+  id                 String             @id @default(uuid()) @db.Uuid
+  businessId         String             @map("business_id") @db.Uuid
+  name               String
+  contactPerson      String?            @map("contact_person")
+  phone              String?
+  email              String?
+  billingAddress     String?            @map("billing_address")
+  gstin              String?
+  accountCode        String?            @map("account_code")
+  isCustomer         Boolean            @default(false) @map("is_customer")
+  isSupplier         Boolean            @default(false) @map("is_supplier")
+  customerCreditDays Int?               @map("customer_credit_days")
+  supplierCreditDays Int?               @map("supplier_credit_days")
+  paymentTerms       String?            @map("payment_terms")
+  creditLimit        Decimal?           @map("credit_limit") @db.Decimal(14, 2)
+  status             CounterpartyStatus @default(active)
+  assignedUserId     String?            @map("assigned_user_id") @db.Uuid
+  notes              String?
+  importBatchId      String?            @map("import_batch_id") @db.Uuid
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  invoices       Invoice[]
+  payments       Payment[]
+  followUps      FollowUp[]
+  communications Communication[]
+  promises       PaymentPromise[]
+  disputes       Dispute[]
+  documents      Document[]
+  messages       MessageLog[]
+
+  @@unique([businessId, accountCode])
+  @@index([businessId, name])
+  @@index([businessId, isCustomer])
+  @@index([businessId, isSupplier])
+  @@map("counterparties")
+}
+
+// ---------------------------------------------------------------- invoices & bills
+
+// Receivable invoices and payable bills share one table, distinguished by
+// `direction`, so balances, allocations, documents and reminders use one
+// tested code path. Payable-only fields (priority, planned payments) are
+// ignored for receivables.
+model Invoice {
+  id                    String           @id @default(uuid()) @db.Uuid
+  businessId            String           @map("business_id") @db.Uuid
+  direction             InvoiceDirection
+  counterpartyId        String           @map("counterparty_id") @db.Uuid
+  invoiceNumber         String           @map("invoice_number")
+  invoiceDate           DateTime         @map("invoice_date") @db.Date
+  paymentTerms          String?          @map("payment_terms")
+  creditDays            Int?             @map("credit_days")
+  dueDate               DateTime         @map("due_date") @db.Date
+  dueDateManual         Boolean          @default(false) @map("due_date_manual")
+  subtotalAmount        Decimal?         @map("subtotal_amount") @db.Decimal(14, 2)
+  taxAmount             Decimal?         @map("tax_amount") @db.Decimal(14, 2)
+  totalAmount           Decimal          @map("total_amount") @db.Decimal(14, 2)
+  // Maintained transactionally by the payment / adjustment services and
+  // guarded by CHECK constraints: outstanding = total - paid - adjusted.
+  amountPaid            Decimal          @default(0) @map("amount_paid") @db.Decimal(14, 2)
+  amountAdjusted        Decimal          @default(0) @map("amount_adjusted") @db.Decimal(14, 2)
+  outstandingAmount     Decimal          @map("outstanding_amount") @db.Decimal(14, 2)
+  lifecycle             InvoiceLifecycle @default(open)
+  poReference           String?          @map("po_reference")
+  deliveryReference     String?          @map("delivery_reference")
+  notes                 String?
+  assignedUserId        String?          @map("assigned_user_id") @db.Uuid
+  priority              PaymentPriority  @default(normal)
+  remindersEnabled      Boolean          @default(true) @map("reminders_enabled")
+  duplicateOverride     String?          @map("duplicate_override")
+  settledOn             DateTime?        @map("settled_on") @db.Date
+  voidReason            String?          @map("void_reason")
+  voidedAt              DateTime?        @map("voided_at") @db.Timestamptz
+  importBatchId         String?          @map("import_batch_id") @db.Uuid
+  createdById           String?          @map("created_by_id") @db.Uuid
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  counterparty    Counterparty        @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  allocations     PaymentAllocation[]
+  adjustments     Adjustment[]
+  followUps       FollowUp[]
+  communications  CommunicationInvoice[]
+  promiseLinks    PromiseInvoice[]
+  disputes        Dispute[]
+  documents       Document[]
+  plannedPayments PlannedPayment[]
+  reminderJobs    ReminderJob[]
+  messages        MessageLog[]
+
+  @@index([businessId, direction, dueDate])
+  @@index([businessId, direction, lifecycle])
+  @@index([businessId, counterpartyId])
+  @@index([businessId, assignedUserId])
+  @@map("invoices")
+}
+
+model Adjustment {
+  id             String         @id @default(uuid()) @db.Uuid
+  businessId     String         @map("business_id") @db.Uuid
+  invoiceId      String         @map("invoice_id") @db.Uuid
+  kind           AdjustmentKind
+  amount         Decimal        @db.Decimal(14, 2)
+  adjustmentDate DateTime       @map("adjustment_date") @db.Date
+  reference      String?
+  reason         String
+  status         RecordStatus   @default(active)
+  reversedAt     DateTime?      @map("reversed_at") @db.Timestamptz
+  reversedById   String?        @map("reversed_by_id") @db.Uuid
+  reversalReason String?        @map("reversal_reason")
+  createdById    String?        @map("created_by_id") @db.Uuid
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([businessId, invoiceId])
+  @@map("adjustments")
+}
+
+model PlannedPayment {
+  id                 String               @id @default(uuid()) @db.Uuid
+  businessId         String               @map("business_id") @db.Uuid
+  invoiceId          String               @map("invoice_id") @db.Uuid
+  plannedDate        DateTime             @map("planned_date") @db.Date
+  amount             Decimal              @db.Decimal(14, 2)
+  // True when the date was communicated to the supplier as a commitment.
+  promisedToSupplier Boolean              @default(false) @map("promised_to_supplier")
+  status             PlannedPaymentStatus @default(scheduled)
+  rescheduleCount    Int                  @default(0) @map("reschedule_count")
+  notes              String?
+  createdById        String?              @map("created_by_id") @db.Uuid
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([businessId, plannedDate])
+  @@map("planned_payments")
+}
+
+// ---------------------------------------------------------------- payments
+
+model Payment {
+  id              String           @id @default(uuid()) @db.Uuid
+  businessId      String           @map("business_id") @db.Uuid
+  direction       PaymentDirection
+  counterpartyId  String           @map("counterparty_id") @db.Uuid
+  amount          Decimal          @db.Decimal(14, 2)
+  allocatedAmount Decimal          @default(0) @map("allocated_amount") @db.Decimal(14, 2)
+  paymentDate     DateTime         @map("payment_date") @db.Date
+  method          String
+  reference       String?
+  notes           String?
+  status          RecordStatus     @default(active)
+  reversedAt      DateTime?        @map("reversed_at") @db.Timestamptz
+  reversedById    String?          @map("reversed_by_id") @db.Uuid
+  reversalReason  String?          @map("reversal_reason")
+  importBatchId   String?          @map("import_batch_id") @db.Uuid
+  createdById     String?          @map("created_by_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  counterparty Counterparty        @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  allocations  PaymentAllocation[]
+  documents    Document[]
+
+  @@index([businessId, direction, paymentDate])
+  @@index([businessId, counterpartyId])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  id             String       @id @default(uuid()) @db.Uuid
+  businessId     String       @map("business_id") @db.Uuid
+  paymentId      String       @map("payment_id") @db.Uuid
+  invoiceId      String       @map("invoice_id") @db.Uuid
+  amount         Decimal      @db.Decimal(14, 2)
+  status         RecordStatus @default(active)
+  reversedAt     DateTime?    @map("reversed_at") @db.Timestamptz
+  reversedById   String?      @map("reversed_by_id") @db.Uuid
+  reversalReason String?      @map("reversal_reason")
+  createdById    String?      @map("created_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([businessId, invoiceId])
+  @@index([businessId, paymentId])
+  @@map("payment_allocations")
+}
+
+// ---------------------------------------------------------------- collections
+
+model FollowUp {
+  id             String         @id @default(uuid()) @db.Uuid
+  businessId     String         @map("business_id") @db.Uuid
+  counterpartyId String         @map("counterparty_id") @db.Uuid
+  invoiceId      String?        @map("invoice_id") @db.Uuid
+  type           FollowUpType
+  title          String
+  dueDate        DateTime       @map("due_date") @db.Date
+  assignedUserId String?        @map("assigned_user_id") @db.Uuid
+  status         FollowUpStatus @default(pending)
+  source         FollowUpSource @default(manual)
+  priority       NotificationPriority @default(normal)
+  details        String?
+  completedAt    DateTime?      @map("completed_at") @db.Timestamptz
+  completedById  String?        @map("completed_by_id") @db.Uuid
+  completionNote String?        @map("completion_note")
+  dedupeKey      String?        @map("dedupe_key")
+  createdById    String?        @map("created_by_id") @db.Uuid
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  counterparty Counterparty @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([businessId, dedupeKey])
+  @@index([businessId, status, dueDate])
+  @@index([businessId, assignedUserId, status])
+  @@map("follow_ups")
+}
+
+model Communication {
+  id             String                 @id @default(uuid()) @db.Uuid
+  businessId     String                 @map("business_id") @db.Uuid
+  counterpartyId String                 @map("counterparty_id") @db.Uuid
+  channel        CommunicationChannel
+  direction      CommunicationDirection @default(outbound)
+  outcome        CallOutcome?
+  contactPerson  String?                @map("contact_person")
+  notes          String?
+  contactedAt    DateTime               @map("contacted_at") @db.Timestamptz
+  followUpId     String?                @map("follow_up_id") @db.Uuid
+  createdById    String?                @map("created_by_id") @db.Uuid
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz
+
+  counterparty Counterparty           @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  invoices     CommunicationInvoice[]
+
+  @@index([businessId, counterpartyId, contactedAt])
+  @@map("communications")
+}
+
+model CommunicationInvoice {
+  communicationId String @map("communication_id") @db.Uuid
+  invoiceId       String @map("invoice_id") @db.Uuid
+  businessId      String @map("business_id") @db.Uuid
+
+  communication Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@id([communicationId, invoiceId])
+  @@index([businessId, invoiceId])
+  @@map("communication_invoices")
+}
+
+model PaymentPromise {
+  id             String        @id @default(uuid()) @db.Uuid
+  businessId     String        @map("business_id") @db.Uuid
+  counterpartyId String        @map("counterparty_id") @db.Uuid
+  amount         Decimal       @db.Decimal(14, 2)
+  promisedDate   DateTime      @map("promised_date") @db.Date
+  isFullPayment  Boolean       @default(false) @map("is_full_payment")
+  reason         String?
+  followUpDate   DateTime?     @map("follow_up_date") @db.Date
+  status         PromiseStatus @default(upcoming)
+  amountReceived Decimal?      @map("amount_received") @db.Decimal(14, 2)
+  evaluatedAt    DateTime?     @map("evaluated_at") @db.Timestamptz
+  needsReview    Boolean       @default(false) @map("needs_review")
+  reviewNote     String?       @map("review_note")
+  cancelReason   String?       @map("cancel_reason")
+  // A partially kept promise can carry its remainder into a new commitment.
+  parentPromiseId String?      @map("parent_promise_id") @db.Uuid
+  recordedAt     DateTime      @default(now()) @map("recorded_at") @db.Timestamptz
+  createdById    String?       @map("created_by_id") @db.Uuid
+
+  counterparty Counterparty     @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  invoices     PromiseInvoice[]
+
+  @@index([businessId, status, promisedDate])
+  @@index([businessId, counterpartyId])
+  @@map("payment_promises")
+}
+
+model PromiseInvoice {
+  promiseId  String @map("promise_id") @db.Uuid
+  invoiceId  String @map("invoice_id") @db.Uuid
+  businessId String @map("business_id") @db.Uuid
+
+  promise PaymentPromise @relation(fields: [promiseId], references: [id], onDelete: Cascade)
+  invoice Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@id([promiseId, invoiceId])
+  @@index([businessId, invoiceId])
+  @@map("promise_invoices")
+}
+
+model Dispute {
+  id              String          @id @default(uuid()) @db.Uuid
+  businessId      String          @map("business_id") @db.Uuid
+  invoiceId       String          @map("invoice_id") @db.Uuid
+  counterpartyId  String          @map("counterparty_id") @db.Uuid
+  category        DisputeCategory
+  description     String
+  status          DisputeStatus   @default(open)
+  raisedOn        DateTime        @map("raised_on") @db.Date
+  assignedUserId  String?         @map("assigned_user_id") @db.Uuid
+  disputedAmount  Decimal?        @map("disputed_amount") @db.Decimal(14, 2)
+  collectionHold  Boolean         @default(false) @map("collection_hold")
+  holdReason      String?         @map("hold_reason")
+  resolutionNotes String?         @map("resolution_notes")
+  resolvedOn      DateTime?       @map("resolved_on") @db.Date
+  lastActivityAt  DateTime        @default(now()) @map("last_activity_at") @db.Timestamptz
+  createdById     String?         @map("created_by_id") @db.Uuid
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  invoice      Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  counterparty Counterparty    @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  updates      DisputeUpdate[]
+  documents    Document[]
+
+  @@index([businessId, status])
+  @@index([businessId, invoiceId])
+  @@map("disputes")
+}
+
+model DisputeUpdate {
+  id          String         @id @default(uuid()) @db.Uuid
+  businessId  String         @map("business_id") @db.Uuid
+  disputeId   String         @map("dispute_id") @db.Uuid
+  fromStatus  DisputeStatus? @map("from_status")
+  toStatus    DisputeStatus  @map("to_status")
+  note        String?
+  createdById String?        @map("created_by_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, disputeId])
+  @@map("dispute_updates")
+}
+
+// ---------------------------------------------------------------- notifications & reminders
+
+model Notification {
+  id         String               @id @default(uuid()) @db.Uuid
+  businessId String               @map("business_id") @db.Uuid
+  userId     String               @map("user_id") @db.Uuid
+  category   String
+  priority   NotificationPriority @default(normal)
+  title      String
+  body       String?
+  link       String?
+  entityType String?              @map("entity_type")
+  entityId   String?              @map("entity_id") @db.Uuid
+  dedupeKey  String?              @map("dedupe_key")
+  readAt     DateTime?            @map("read_at") @db.Timestamptz
+  createdAt  DateTime             @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([businessId, userId, dedupeKey])
+  @@index([businessId, userId, readAt])
+  @@map("notifications")
+}
+
+model ReminderJob {
+  id             String            @id @default(uuid()) @db.Uuid
+  businessId     String            @map("business_id") @db.Uuid
+  type           String
+  dedupeKey      String            @map("dedupe_key")
+  scheduledFor   DateTime          @map("scheduled_for") @db.Date
+  invoiceId      String?           @map("invoice_id") @db.Uuid
+  promiseId      String?           @map("promise_id") @db.Uuid
+  followUpId     String?           @map("follow_up_id") @db.Uuid
+  plannedPaymentId String?         @map("planned_payment_id") @db.Uuid
+  disputeId      String?           @map("dispute_id") @db.Uuid
+  counterpartyId String?           @map("counterparty_id") @db.Uuid
+  // Snapshot of the due date the job was scheduled against; a later due-date
+  // change makes the job obsolete.
+  dueDateSnapshot DateTime?        @map("due_date_snapshot") @db.Date
+  status         ReminderJobStatus @default(pending)
+  statusReason   String?           @map("status_reason")
+  attempts       Int               @default(0)
+  nextAttemptAt  DateTime?         @map("next_attempt_at") @db.Timestamptz
+  lastError      String?           @map("last_error")
+  processedAt    DateTime?         @map("processed_at") @db.Timestamptz
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  invoice    Invoice?           @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  deliveries ReminderDelivery[]
+
+  @@unique([businessId, dedupeKey])
+  @@index([status, scheduledFor])
+  @@index([businessId, invoiceId])
+  @@map("reminder_jobs")
+}
+
+model ReminderDelivery {
+  id              String          @id @default(uuid()) @db.Uuid
+  businessId      String          @map("business_id") @db.Uuid
+  jobId           String          @map("job_id") @db.Uuid
+  channel         DeliveryChannel
+  recipientUserId String          @map("recipient_user_id") @db.Uuid
+  status          DeliveryStatus  @default(pending)
+  statusReason    String?         @map("status_reason")
+  attempts        Int             @default(0)
+  lastError       String?         @map("last_error")
+  deliveredAt     DateTime?       @map("delivered_at") @db.Timestamptz
+  notificationId  String?         @map("notification_id") @db.Uuid
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  job ReminderJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, channel, recipientUserId])
+  @@index([businessId, status])
+  @@map("reminder_deliveries")
+}
+
+// Record of every customer/supplier-facing message prepared or sent from
+// the app. Content is stored as sent and never edited afterwards.
+model MessageLog {
+  id             String        @id @default(uuid()) @db.Uuid
+  businessId     String        @map("business_id") @db.Uuid
+  counterpartyId String        @map("counterparty_id") @db.Uuid
+  invoiceId      String?       @map("invoice_id") @db.Uuid
+  templateKey    String        @map("template_key")
+  channel        String
+  recipient      String?
+  subject        String?
+  body           String
+  status         MessageStatus
+  error          String?
+  createdById    String?       @map("created_by_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  counterparty Counterparty @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([businessId, counterpartyId, createdAt])
+  @@map("message_logs")
+}
+
+// ---------------------------------------------------------------- documents
+
+model Document {
+  id             String       @id @default(uuid()) @db.Uuid
+  businessId     String       @map("business_id") @db.Uuid
+  kind           DocumentKind
+  originalName   String       @map("original_name")
+  storageKey     String       @unique @map("storage_key")
+  mimeType       String       @map("mime_type")
+  sizeBytes      Int          @map("size_bytes")
+  sha256         String
+  counterpartyId String?      @map("counterparty_id") @db.Uuid
+  invoiceId      String?      @map("invoice_id") @db.Uuid
+  paymentId      String?      @map("payment_id") @db.Uuid
+  disputeId      String?      @map("dispute_id") @db.Uuid
+  uploadedById   String?      @map("uploaded_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt      DateTime?    @map("deleted_at") @db.Timestamptz
+  deletedById    String?      @map("deleted_by_id") @db.Uuid
+
+  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment      Payment?      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  dispute      Dispute?      @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+
+  @@index([businessId, invoiceId])
+  @@index([businessId, counterpartyId])
+  @@map("documents")
+}
+
+// ---------------------------------------------------------------- audit & imports
+
+// Append-only. UPDATE/DELETE are blocked by a trigger.
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  businessId  String   @map("business_id") @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id") @db.Uuid
+  summary     String?
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([businessId, createdAt])
+  @@index([businessId, entityType, entityId])
+  @@map("audit_logs")
+}
+
+model ImportBatch {
+  id           String       @id @default(uuid()) @db.Uuid
+  businessId   String       @map("business_id") @db.Uuid
+  type         ImportType
+  fileName     String       @map("file_name")
+  fileHash     String       @map("file_hash")
+  status       ImportStatus @default(previewed)
+  totalRows    Int          @default(0) @map("total_rows")
+  createdRows  Int          @default(0) @map("created_rows")
+  skippedRows  Int          @default(0) @map("skipped_rows")
+  failedRows   Int          @default(0) @map("failed_rows")
+  mapping      Json?
+  createdById  String?      @map("created_by_id") @db.Uuid
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  completedAt  DateTime?    @map("completed_at") @db.Timestamptz
+
+  rows ImportRow[]
+
+  @@index([businessId, type, fileHash])
+  @@map("import_batches")
+}
+
+model ImportRow {
+  id         String           @id @default(uuid()) @db.Uuid
+  businessId String           @map("business_id") @db.Uuid
+  batchId    String           @map("batch_id") @db.Uuid
+  rowNumber  Int              @map("row_number")
+  raw        Json
+  outcome    ImportRowOutcome
+  errors     String[]         @default([])
+  entityId   String?          @map("entity_id") @db.Uuid
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, batchId])
+  @@map("import_rows")
+}

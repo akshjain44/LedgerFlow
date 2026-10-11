@@ -1,0 +1,51 @@
+{
+  "name": "ledgerflow",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "node --env-file=.env.local tests/e2e/acceptance.mjs",
+    "db:migrate": "node --env-file=.env.local node_modules/.bin/prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:seed-demo": "node --env-file=.env.local --import tsx scripts/seed-demo.ts",
+    "reminders:run": "node --env-file=.env.local --import tsx scripts/run-reminders.ts",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.29.0",
+    "next": "16.3.0",
+    "nodemailer": "^7.0.0",
+    "papaparse": "^5.5.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "recharts": "^3.2.1",
+    "server-only": "^0.0.1",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^22",
+    "@types/nodemailer": "^7.0.0",
+    "@types/papaparse": "^5.3.16",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "prisma": "6.19.3",
+    "tailwindcss": "^4",
+    "tsx": "^4.20.0",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}

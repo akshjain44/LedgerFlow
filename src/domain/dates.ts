@@ -9,6 +9,10 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function isISODate(s: unknown): s is ISODate {
+  return validIso(s);
+}
+
+function validIso(s: unknown): boolean {
   if (typeof s !== "string" || !ISO_RE.test(s)) return false;
   const d = new Date(s + "T00:00:00Z");
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
@@ -86,7 +90,7 @@ export function endOfMonth(date: ISODate): ISODate {
 /** Converts "DD/MM/YYYY", "DD-MM-YYYY", "YYYY-MM-DD" or "07 Oct 2026" to ISO. Returns null if ambiguous or invalid. */
 export function parseFlexibleDate(input: string): ISODate | null {
   const s = input.trim();
-  if (isISODate(s)) return s;
+  if (validIso(s)) return s;
   let m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
   if (m) {
     const iso = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
@@ -100,4 +104,22 @@ export function parseFlexibleDate(input: string): ISODate | null {
     return isISODate(iso) ? iso : null;
   }
   return null;
+}
+
+/** The instant at which `date` begins in `timezone` (for filtering TIMESTAMPTZ columns by business-local day). */
+export function zonedStartOfDay(date: ISODate, timezone: string): Date {
+  const utcGuess = new Date(date + "T00:00:00Z");
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(utcGuess);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return new Date(utcGuess.getTime() - (asUtc - utcGuess.getTime()));
 }

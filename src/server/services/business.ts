@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { prisma, withSystem, withTenant } from "../db";
-import { assertCan, type TenantContext } from "../context";
+import { assertCan, type TenantContext } from "../authz";
 import { AppError, ForbiddenError, NotFoundError } from "../errors";
 import { audit } from "../audit";
 import { hashToken, newToken } from "../auth/password";

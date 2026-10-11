@@ -14,8 +14,8 @@
     "test:e2e": "node --env-file=.env.local tests/e2e/acceptance.mjs",
     "db:migrate": "node --env-file=.env.local node_modules/.bin/prisma migrate deploy",
     "db:generate": "prisma generate",
-    "db:seed-demo": "node --env-file=.env.local --import tsx scripts/seed-demo.ts",
-    "reminders:run": "node --env-file=.env.local --import tsx scripts/run-reminders.ts",
+    "db:seed-demo": "node --env-file=.env.local --conditions=react-server --import tsx scripts/seed-demo.ts",
+    "reminders:run": "node --env-file=.env.local --conditions=react-server --import tsx scripts/run-reminders.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

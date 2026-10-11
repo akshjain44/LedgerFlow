@@ -148,9 +148,15 @@ async function planBusiness(tx: Tx, businessId: string, now: Date): Promise<Busi
   const transitions = await evaluatePromises(tx, { businessId, timezone: business.timezone, today, actorUserId: null });
   for (const t of transitions) {
     if (t.to === "kept" || t.to === "partially_kept") summary.promisesKept++;
-    if (t.to !== "broken") continue;
-    summary.promisesBroken++;
-    const p = t.promise;
+    if (t.to === "broken") summary.promisesBroken++;
+  }
+  // Act on the current state, not only on transitions seen by this run: a
+  // promise can also become broken when a user action re-evaluates it.
+  const windowStart = toDbDate(addDays(today, -settings.brokenPromiseWindowDays));
+  const recentlyBroken = await tx.paymentPromise.findMany({
+    where: { status: "broken", evaluatedAt: { gte: new Date(now.getTime() - 3 * 86_400_000) } },
+  });
+  for (const p of recentlyBroken) {
     const cp = await tx.counterparty.findUniqueOrThrow({ where: { id: p.counterpartyId }, select: { name: true, assignedUserId: true } });
     await tx.reminderJob.createMany({
       data: [{ businessId, type: "promise_broken", dedupeKey: `promise_broken:${p.id}`, scheduledFor: toDbDate(today), promiseId: p.id, counterpartyId: p.counterpartyId }],
@@ -170,36 +176,41 @@ async function planBusiness(tx: Tx, businessId: string, now: Date): Promise<Busi
       }],
       skipDuplicates: true,
     });
-    // Escalation: N broken promises within the window → owner review.
-    const windowStart = toDbDate(addDays(today, -settings.brokenPromiseWindowDays));
-    const broken = await tx.paymentPromise.findMany({
-      where: { counterpartyId: p.counterpartyId, status: "broken", promisedDate: { gte: windowStart } },
-      orderBy: { promisedDate: "asc" },
+  }
+  // Escalation: N broken promises within the window → one owner review per
+  // newest broken promise (dedupe key), with the underlying facts attached.
+  const brokenInWindow = await tx.paymentPromise.findMany({
+    where: { status: "broken", promisedDate: { gte: windowStart } },
+    orderBy: { promisedDate: "asc" },
+  });
+  const byCounterparty = new Map<string, typeof brokenInWindow>();
+  for (const b of brokenInWindow) byCounterparty.set(b.counterpartyId, [...(byCounterparty.get(b.counterpartyId) ?? []), b]);
+  for (const [counterpartyId, broken] of byCounterparty) {
+    if (broken.length < settings.brokenPromiseThreshold) continue;
+    const latest = broken[broken.length - 1];
+    const cp = await tx.counterparty.findUniqueOrThrow({ where: { id: counterpartyId }, select: { name: true } });
+    const owner = await tx.membership.findFirst({ where: { businessId, role: "owner", status: "active" }, orderBy: { createdAt: "asc" } });
+    const facts = broken.map((b) => `${formatINR(paise(b.amount))} promised for ${formatDate(b.promisedDate)}, received ${formatINR(paise(b.amountReceived))} by then`).join("; ");
+    const created = await tx.followUp.createMany({
+      data: [{
+        businessId,
+        counterpartyId,
+        type: "escalation",
+        title: `Owner review: ${cp.name} has ${broken.length} broken payment promises`,
+        details: `Facts: ${facts}. Consider reviewing credit terms, credit limit or future order conditions. This is a review prompt, not an automatic decision.`,
+        dueDate: toDbDate(today),
+        assignedUserId: owner?.userId ?? null,
+        source: "escalation",
+        priority: "urgent",
+        dedupeKey: `escalation:${counterpartyId}:${latest.id}`,
+      }],
+      skipDuplicates: true,
     });
-    if (broken.length >= settings.brokenPromiseThreshold) {
-      summary.escalations++;
-      const owner = await tx.membership.findFirst({ where: { businessId, role: "owner", status: "active" }, orderBy: { createdAt: "asc" } });
-      const facts = broken.map((b) => `${formatINR(paise(b.amount))} promised for ${formatDate(b.promisedDate)}, received ${formatINR(paise(b.amountReceived))}`).join("; ");
-      await tx.followUp.createMany({
-        data: [{
-          businessId,
-          counterpartyId: p.counterpartyId,
-          type: "escalation",
-          title: `Owner review: ${cp.name} has ${broken.length} broken payment promises`,
-          details: `Facts: ${facts}. Consider reviewing credit terms, credit limit or future order conditions. This is a review prompt, not an automatic decision.`,
-          dueDate: toDbDate(today),
-          assignedUserId: owner?.userId ?? null,
-          source: "escalation",
-          priority: "urgent",
-          dedupeKey: `escalation:${p.counterpartyId}:${p.id}`,
-        }],
-        skipDuplicates: true,
-      });
-      await tx.reminderJob.createMany({
-        data: [{ businessId, type: "promise_repeated_broken", dedupeKey: `escalation:${p.id}`, scheduledFor: toDbDate(today), promiseId: p.id, counterpartyId: p.counterpartyId }],
-        skipDuplicates: true,
-      });
-    }
+    if (created.count > 0) summary.escalations++;
+    await tx.reminderJob.createMany({
+      data: [{ businessId, type: "promise_repeated_broken", dedupeKey: `escalation:${latest.id}`, scheduledFor: toDbDate(today), promiseId: latest.id, counterpartyId }],
+      skipDuplicates: true,
+    });
   }
   const dueToday = await tx.paymentPromise.findMany({ where: { status: "upcoming", promisedDate: toDbDate(today) }, select: { id: true, counterpartyId: true } });
   if (dueToday.length) {

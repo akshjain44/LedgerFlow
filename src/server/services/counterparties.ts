@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { withTenant, type Tx } from "../db";
-import { assertCan, type TenantContext } from "../context";
+import { assertCan, type TenantContext } from "../authz";
 import { AppError, NotFoundError } from "../errors";
 import { audit, diff } from "../audit";
 import { dec } from "./common";

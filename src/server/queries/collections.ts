@@ -1,6 +1,6 @@
 import "server-only";
 import { withTenant } from "../db";
-import { assertCan, type TenantContext } from "../context";
+import { assertCan, type TenantContext } from "../authz";
 import { loadSettings, paise } from "../services/common";
 import { addDays, diffDays, fromDbDate, todayIn, toDbDate } from "@/domain/dates";
 import { scoreAccount, type PriorityResult } from "@/domain/priority";

@@ -1,7 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { withTenant } from "../db";
-import { assertCan, type TenantContext } from "../context";
+import { assertCan, type TenantContext } from "../authz";
 import { NotFoundError } from "../errors";
 import { paise } from "../services/common";
 import { fromDbDate, toDbDate } from "@/domain/dates";

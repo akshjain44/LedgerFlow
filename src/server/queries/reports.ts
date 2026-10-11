@@ -1,7 +1,7 @@
 import "server-only";
 import type { InvoiceDirection } from "@prisma/client";
 import { withTenant, type Tx } from "../db";
-import { assertCan, type TenantContext } from "../context";
+import { assertCan, type TenantContext } from "../authz";
 import { loadSettings, paise } from "../services/common";
 import { addDays, diffDays, endOfMonth, formatDate, fromDbDate, isISODate, startOfMonth, todayIn, toDbDate, zonedStartOfDay, type ISODate } from "@/domain/dates";
 import { addToAgeing, emptyAgeing, type AgeingTotals } from "@/domain/ageing";

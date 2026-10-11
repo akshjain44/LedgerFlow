@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import type { CallOutcome, DisputeStatus } from "@prisma/client";
 import { withTenant, type Tx } from "../db";
-import { assertCan, type TenantContext } from "../context";
+import { assertCan, type TenantContext } from "../authz";
 import { AppError, NotFoundError } from "../errors";
 import { audit } from "../audit";
 import { dec, loadSettings, paise, requireCounterparty } from "./common";

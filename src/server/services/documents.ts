@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { DocumentKind } from "@prisma/client";
 import { withTenant } from "../db";
-import { assertCan, type TenantContext } from "../context";
+import { assertCan, type TenantContext } from "../authz";
 import { AppError, NotFoundError } from "../errors";
 import { audit } from "../audit";
 import { MAX_UPLOAD_BYTES, newStorageKey, sniffType, storage } from "../storage";

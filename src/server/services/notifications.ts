@@ -1,7 +1,7 @@
 import "server-only";
 import type { NotificationPriority } from "@prisma/client";
 import { withTenant, type Tx } from "../db";
-import type { TenantContext } from "../context";
+import type { TenantContext } from "../authz";
 
 export interface NotifyInput {
   businessId: string;

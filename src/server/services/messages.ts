@@ -1,6 +1,6 @@
 import "server-only";
 import { withTenant } from "../db";
-import { assertCan, type TenantContext } from "../context";
+import { assertCan, type TenantContext } from "../authz";
 import { AppError, NotFoundError } from "../errors";
 import { audit } from "../audit";
 import { getEmailProvider } from "../email";

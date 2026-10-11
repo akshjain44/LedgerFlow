@@ -3,24 +3,11 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { prisma } from "./db";
 import { getSession } from "./auth/session";
-import { effectivePermissions, type Permission, type Role } from "@/domain/permissions";
+import { effectivePermissions, type Permission } from "@/domain/permissions";
 import { ForbiddenError } from "./errors";
+import type { TenantContext } from "./authz";
+export { can, assertCan, type TenantContext } from "./authz";
 import { todayIn } from "@/domain/dates";
-
-export interface TenantContext {
-  userId: string;
-  userName: string;
-  userEmail: string;
-  sessionId: string;
-  businessId: string;
-  businessName: string;
-  timezone: string;
-  isDemo: boolean;
-  role: Role;
-  permissions: Set<Permission>;
-  memberships: { businessId: string; businessName: string; role: Role }[];
-  today: string;
-}
 
 /** Signed-in user or redirect to /login. */
 export async function requireUser() {
@@ -77,10 +64,3 @@ export async function tenantOrThrow(permission?: Permission): Promise<TenantCont
   return ctx;
 }
 
-export function can(ctx: Pick<TenantContext, "permissions">, permission: Permission): boolean {
-  return ctx.permissions.has(permission);
-}
-
-export function assertCan(ctx: Pick<TenantContext, "permissions">, permission: Permission) {
-  if (!ctx.permissions.has(permission)) throw new ForbiddenError();
-}

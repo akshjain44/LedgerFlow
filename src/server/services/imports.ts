@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import Papa from "papaparse";
 import type { ImportType } from "@prisma/client";
 import { withTenant, type Tx } from "../db";
-import { assertCan, type TenantContext } from "../context";
+import { assertCan, type TenantContext } from "../authz";
 import { AppError } from "../errors";
 import { audit } from "../audit";
 import { parseFlexibleDate } from "@/domain/dates";

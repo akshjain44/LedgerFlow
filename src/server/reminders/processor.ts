@@ -247,6 +247,25 @@ async function planBusiness(tx: Tx, businessId: string, now: Date): Promise<Busi
     summary.staleSkipped = staleIds.length;
   }
 
+  // 7. One reminder per invoice per run: when several scheduled reminders for
+  // the same invoice are due (new or imported invoice, outage), send only the
+  // most recent and mark the others superseded.
+  const dueInvoiceJobs = await tx.reminderJob.findMany({
+    where: { status: "pending", invoiceId: { not: null }, scheduledFor: { lte: toDbDate(today) }, type: { in: ["receivable_upcoming", "receivable_due_today", "receivable_overdue", "payable_upcoming", "payable_overdue"] } },
+    select: { id: true, invoiceId: true, scheduledFor: true },
+    orderBy: { scheduledFor: "desc" },
+  });
+  const keep = new Set<string>();
+  const superseded: string[] = [];
+  for (const j of dueInvoiceJobs) {
+    if (keep.has(j.invoiceId!)) superseded.push(j.id);
+    else keep.add(j.invoiceId!);
+  }
+  if (superseded.length) {
+    await tx.reminderJob.updateMany({ where: { id: { in: superseded } }, data: { status: "skipped", statusReason: "Superseded by a later reminder for the same invoice", processedAt: now } });
+    summary.staleSkipped += superseded.length;
+  }
+
   summary.jobsCreated = (await tx.reminderJob.count()) - jobsBefore;
   summary.followUpsCreated = (await tx.followUp.count()) - followUpsBefore;
   return summary;

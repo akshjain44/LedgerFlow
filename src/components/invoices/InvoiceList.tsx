@@ -8,6 +8,7 @@ import { Badge, Card, EmptyState, LinkButton, PageHeader, Td } from "@/component
 import { DateText, DateTimeText, DaysLabel, Money, PromiseBadge, StatusBadge, PRIORITY_TONE } from "@/components/format";
 import { FilterChips, Pagination, SortHeader, buildQs } from "@/components/ListControls";
 import { BulkBar, RowSelect } from "@/components/BulkBar";
+import { MobileFilters } from "@/components/MobileFilters";
 
 export async function InvoiceList({ ctx, direction, sp }: { ctx: TenantContext; direction: InvoiceDirection; sp: Record<string, string | undefined> }) {
   const recv = direction === "receivable";
@@ -37,6 +38,7 @@ export async function InvoiceList({ ctx, direction, sp }: { ctx: TenantContext; 
       <div className="mb-3">
         <FilterChips path={path} params={params} options={INVOICE_FILTERS[direction]} current={sp.filter ?? ""} />
       </div>
+      <MobileFilters active={!!(sp.q || sp.counterpartyId || sp.assignee || sp.bucket || sp.min || sp.max || sp.priority)}>
       <form action={path} className="no-print mb-4 grid gap-2 rounded-lg border border-line bg-surface p-3 sm:grid-cols-2 lg:grid-cols-6" role="search">
         {sp.filter && <input type="hidden" name="filter" value={sp.filter} />}
         <label className="lg:col-span-2"><span className="sr-only">Search</span><input name="q" defaultValue={sp.q} placeholder={`Invoice no., ${party.toLowerCase()}, PO or challan ref.`} className="h-9 w-full rounded-md border border-line-strong px-3 text-[13.5px]" /></label>
@@ -74,6 +76,7 @@ export async function InvoiceList({ ctx, direction, sp }: { ctx: TenantContext; 
           <Link href={path} className="flex h-9 items-center rounded-md border border-line-strong px-3 text-[13.5px]">Reset</Link>
         </div>
       </form>
+      </MobileFilters>
 
       <Card padded={false}>
         {data.total === 0 ? (

@@ -61,7 +61,7 @@ async function onboard(page, businessName) {
   await page.waitForURL("**/dashboard");
 }
 
-let invoiceUrl, customerUrl, ownerPage;
+let invoiceUrl, customerUrl, ownerPage, docHref;
 try {
   const page = (ownerPage = await newUserPage());
 
@@ -101,6 +101,24 @@ try {
     assert.match(await text(page), /Receivables outstanding ₹50,000\.00/);
     await page.goto(customerUrl);
     assert.match(await text(page), /Total outstanding ₹50,000\.00/);
+  });
+
+  await step("Documents: upload an invoice PDF and open it through a signed link", async () => {
+    const pdf = `${OUT}/invoice-${run}.pdf`;
+    writeFileSync(pdf, "%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n");
+    await page.goto(invoiceUrl);
+    await page.locator("main").getByRole("button", { name: "Upload document" }).first().click();
+    await dialog(page).locator("#file").setInputFiles(pdf);
+    await dialog(page).getByRole("button", { name: "Upload" }).click();
+    await toast(page, /Document uploaded/);
+    await page.reload();
+    docHref = await page.locator(`a:has-text("invoice-${run}.pdf")`).getAttribute("href");
+    assert.ok(docHref && docHref.includes("sig="));
+    const r = await page.request.get(BASE + docHref);
+    assert.equal(r.status(), 200);
+    assert.equal(r.headers()["content-type"], "application/pdf");
+    const tampered = await page.request.get(BASE + docHref.replace(/sig=[^&]+/, "sig=AAAA"));
+    assert.equal(tampered.status(), 403);
   });
 
   await step("Scenario 2: record ₹20,000 partial payment", async () => {
@@ -275,8 +293,10 @@ try {
     assert.ok(!body.includes(`INV-${run}`), "export must not include the other business's invoices");
     await other.goto(BASE + "/search?q=" + encodeURIComponent(`INV-${run}`));
     assert.match(await text(other), /Nothing found/);
-    const doc = await other.request.get(BASE + "/api/documents/00000000-0000-4000-8000-000000000000?exp=9999999999&sig=x");
-    assert.equal(doc.status(), 403);
+    const doc = await other.request.get(BASE + docHref);
+    assert.equal(doc.status(), 403); // signed link is bound to the uploader's user
+    const anon = await (await browser.newContext()).request.get(BASE + docHref);
+    assert.equal(anon.status(), 401);
     await other.context().close();
   });
 

@@ -31,30 +31,34 @@ export function PaymentForm({ direction, parties, methods, today, initialCounter
   const [amount, setAmount] = useState("");
   const [alloc, setAlloc] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    if (!partyId) {
-      setOpen([]);
-      return;
-    }
+  const toStr = (p: bigint) => `${p / 100n}.${(p % 100n).toString().padStart(2, "0")}`;
+
+  // Pre-fill the allocation for the invoice the user came from.
+  const prefill = (rows: Open[], amt: bigint | null) => {
+    if (!initialInvoiceId || amt === null) return;
+    const o = rows.find((x) => x.id === initialInvoiceId);
+    if (!o) return;
+    const out = toPaise(o.outstanding)!;
+    setAlloc({ [o.id]: toStr(amt < out ? amt : out) });
+  };
+
+  const loadFor = (id: string) => {
     start(async () => {
-      const r = await loadOpenInvoicesAction(partyId, direction === "received" ? "receivable" : "payable");
+      const r = id ? await loadOpenInvoicesAction(id, direction === "received" ? "receivable" : "payable") : [];
       setOpen(r);
       setAlloc({});
     });
-  }, [partyId, direction]);
+  };
+
+  useEffect(() => {
+    if (initialCounterpartyId) loadFor(initialCounterpartyId);
+    // Load once for a pre-selected account; later changes go through onChange.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const amountP = toPaise(amount);
   const allocated = useMemo(() => Object.values(alloc).reduce((a, v) => a + (toPaise(v) ?? 0n), 0n), [alloc]);
   const remaining = amountP !== null ? amountP - allocated : null;
-
-  // Pre-select the invoice the user came from.
-  useEffect(() => {
-    if (initialInvoiceId && open.some((o) => o.id === initialInvoiceId) && amountP !== null && Object.keys(alloc).length === 0) {
-      const o = open.find((x) => x.id === initialInvoiceId)!;
-      const out = toPaise(o.outstanding)!;
-      setAlloc({ [o.id]: ((amountP < out ? amountP : out) / 100n).toString() + "." + ((amountP < out ? amountP : out) % 100n).toString().padStart(2, "0") });
-    }
-  }, [open, initialInvoiceId, amountP, alloc]);
 
   const autoAllocate = () => {
     if (amountP === null) return;
@@ -64,7 +68,7 @@ export function PaymentForm({ direction, parties, methods, today, initialCounter
       if (left <= 0n) break;
       const out = toPaise(o.outstanding)!;
       const take = out < left ? out : left;
-      next[o.id] = `${take / 100n}.${(take % 100n).toString().padStart(2, "0")}`;
+      next[o.id] = toStr(take);
       left -= take;
     }
     setAlloc(next);
@@ -76,13 +80,13 @@ export function PaymentForm({ direction, parties, methods, today, initialCounter
       {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field label={direction === "received" ? "Received from (customer)" : "Paid to (supplier)"} name="counterpartyId" required>
-          <Select name="counterpartyId" value={partyId} onChange={(e) => setPartyId(e.target.value)} required>
+          <Select name="counterpartyId" value={partyId} onChange={(e) => { setPartyId(e.target.value); loadFor(e.target.value); }} required>
             <option value="">Select…</option>
             {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </Select>
         </Field>
         <Field label="Amount (₹)" name="amount" required>
-          <Input name="amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          <Input name="amount" inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); if (Object.keys(alloc).length === 0 || initialInvoiceId) prefill(open, toPaise(e.target.value)); }} required />
         </Field>
         <Field label="Payment date" name="paymentDate" required hint="Cannot be in the future.">
           <Input name="paymentDate" type="date" defaultValue={today} max={today} required />

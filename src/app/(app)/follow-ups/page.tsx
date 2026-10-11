@@ -14,6 +14,7 @@ import { formatINR, fromDecimal } from "@/domain/money";
 import { formatDate, fromDbDate } from "@/domain/dates";
 import { OUTCOME_LABELS } from "@/lib/display";
 import { cn } from "@/lib/cn";
+import { MobileFilters } from "@/components/MobileFilters";
 
 export const metadata = { title: "Follow-ups" };
 
@@ -60,6 +61,7 @@ async function Queue({ ctx, sp, members }: { ctx: Ctx; sp: Record<string, string
   );
   return (
     <>
+      <MobileFilters active={Object.keys(sp).some((k) => k !== "tab" && sp[k])}>
       <form className="no-print mb-4 grid gap-2 rounded-lg border border-line bg-surface p-3 sm:grid-cols-3 lg:grid-cols-8">
         <input name="q" defaultValue={sp.q} placeholder="Customer" aria-label="Customer" className="h-9 rounded-md border border-line-strong px-3 text-[13.5px] lg:col-span-2" />
         <select name="band" defaultValue={sp.band ?? ""} aria-label="Priority" className="h-9 rounded-md border border-line-strong bg-surface px-2 text-[13.5px]"><option value="">Any priority</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
@@ -74,8 +76,9 @@ async function Queue({ ctx, sp, members }: { ctx: Ctx; sp: Record<string, string
         <button className="h-9 rounded-md bg-ink px-3 text-[13.5px] font-medium text-white">Filter</button>
         <Link href="/follow-ups" className="flex h-9 items-center justify-center rounded-md border border-line-strong px-3 text-[13.5px]">Reset</Link>
       </form>
+      </MobileFilters>
       <p className="mb-2 flex items-center gap-1 text-[12.5px] text-muted">
-        {rows.length} account{rows.length === 1 ? "" : "s"} need attention.
+        {rows.length} account{rows.length === 1 ? " needs" : "s need"} attention.
         <Help text="Score = days overdue + amount band + promise due/broken + never contacted / time since contact + missed follow-ups, minus points when a follow-up is already scheduled or a documented dispute hold applies. Weights are configurable in Settings → Financial." />
       </p>
       {rows.length === 0 ? (

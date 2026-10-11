@@ -49,7 +49,6 @@ export async function collectionsQueue(ctx: TenantContext, f: QueueFilters = {})
   return withTenant(ctx.businessId, async (tx) => {
     const { business, settings, weights } = await loadSettings(tx, ctx.businessId);
     const today = ctx.today;
-    const t = toDbDate(today);
     const windowStart = toDbDate(addDays(today, -settings.brokenPromiseWindowDays));
 
     const invoices = await tx.invoice.findMany({

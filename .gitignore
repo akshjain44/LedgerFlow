@@ -7,3 +7,4 @@ next-env.d.ts
 .env.test
 storage/
 test-results/
+storage-test/

@@ -12,7 +12,7 @@ import { previewImport, commitImport } from "@/server/services/imports";
 import { setEmailProviderForTests, type EmailProvider } from "@/server/email";
 import { addDays, fromDbDate } from "@/domain/dates";
 import { fromDecimal } from "@/domain/money";
-import { ctxFor, hasDb, makeBusiness, makeUser, setup } from "./helpers";
+import { ctxFor, hasDb, makeUser, setup } from "./helpers";
 import type { TenantContext } from "@/server/context";
 
 const d = describe.skipIf(!hasDb);

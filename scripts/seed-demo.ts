@@ -131,7 +131,7 @@ async function main() {
     const s1 = await R(shamshabad, "INV-2427", 31, -1, "35400.00");
     const s2 = await R(shamshabad, "INV-2434", 8, 22, "28320.00");
     const x1 = await R(both, "INV-2423", 45, -15, "61360.00");
-    void [g3, m2, b2, o2, s2];
+    void [g3, m2, b2, o2, s2, k2, n2, s1];
 
     // Payments: partial, multi-invoice, unallocated, reversed.
     await pay(godavari, "100000.00", 20, "Bank transfer (NEFT/RTGS/IMPS)", "UTR77104411", [{ invoiceId: g1.id, amount: "100000.00" }]);

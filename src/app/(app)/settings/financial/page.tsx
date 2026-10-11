@@ -10,7 +10,7 @@ export default async function FinancialPage() {
   const ctx = await requireTenant();
   const { settings } = await loadSettingsFor(ctx);
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <Card title="Payments & numbering">
         <FinancialForm methods={settings.paymentMethods} prefix={settings.invoicePrefix} weights={settings.priorityWeights ? JSON.stringify(settings.priorityWeights, null, 2) : ""} disabled={!ctx.permissions.has("settings.manage")} />
       </Card>

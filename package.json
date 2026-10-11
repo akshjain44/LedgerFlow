@@ -11,7 +11,7 @@
     "test": "node --env-file-if-exists=.env.local node_modules/.bin/vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "node --env-file-if-exists=.env.local node_modules/.bin/vitest run tests/integration",
-    "test:e2e": "node --env-file=.env.local tests/e2e/acceptance.mjs",
+    "test:e2e": "node tests/e2e/acceptance.mjs",
     "db:migrate": "node --env-file=.env.local node_modules/.bin/prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:seed-demo": "node --env-file=.env.local --conditions=react-server --import tsx scripts/seed-demo.ts",

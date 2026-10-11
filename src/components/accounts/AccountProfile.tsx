@@ -99,7 +99,7 @@ export async function AccountProfile({ ctx, id, kind }: { ctx: TenantContext; id
       )}
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_380px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Card title={recv ? "Invoices" : "Bills"} padded={false} actions={<LinkButton size="sm" href={`/${recv ? "receivables" : "payables"}?counterpartyId=${cp.id}&filter=all`}>All</LinkButton>}>
             {invoices.length === 0 ? <p className="p-4 text-[13.5px] text-muted">None yet.</p> : (
               <Table>
@@ -187,7 +187,7 @@ export async function AccountProfile({ ctx, id, kind }: { ctx: TenantContext; id
           </Card>
         </div>
 
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Card title="Follow-ups" padded={false} actions={can("collections.work") ? <FollowUpDialog counterpartyId={cp.id} members={members} today={ctx.today} defaultTitle={`${recv ? "Call" : "Contact"} ${cp.name}`} triggerSize="sm" /> : undefined}>
             {pendingFollowUps.length === 0 ? <p className="p-4 text-[13.5px] text-muted">Nothing scheduled.</p> : (
               <ul className="divide-y divide-line">

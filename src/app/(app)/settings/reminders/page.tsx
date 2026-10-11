@@ -12,7 +12,7 @@ export default async function RemindersPage() {
   const { settings } = await loadSettingsFor(ctx);
   const lastRun = await withTenant(ctx.businessId, (tx) => tx.auditLog.findFirst({ where: { action: "reminders.run" }, orderBy: { createdAt: "desc" } }));
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <Card title="Reminder processor" description="Runs on the server on a schedule (see README: cron calling /api/cron/reminders). Safe to run repeatedly — nothing is sent twice.">
         <p className="text-[13.5px]">Last run: {lastRun ? <><DateTimeText value={lastRun.createdAt} tz={ctx.timezone} /> — {lastRun.summary}</> : <span className="text-warn">never</span>}</p>
         {ctx.permissions.has("settings.manage") && <div className="mt-3"><RunRemindersButton /></div>}

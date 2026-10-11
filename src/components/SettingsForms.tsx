@@ -30,8 +30,8 @@ export function BusinessForm({ b, disabled }: { b: { name: string; legalName: st
 
 export function RemindersForm({ s, disabled }: { s: { workingDays: number[]; reminderStartHour: number; reminderEndHour: number; receivableReminderOffsets: number[]; payableReminderOffsets: number[]; remindersEnabled: boolean; emailNotificationsEnabled: boolean; brokenPromiseThreshold: number; brokenPromiseWindowDays: number; financeManagerOverdueDays: number; disputeReviewDays: number; disputePolicy: string }; disabled: boolean }) {
   return (
-    <ActionForm action={updateRemindersAction} className="space-y-5">
-      <fieldset disabled={disabled} className="space-y-5">
+    <ActionForm action={updateRemindersAction} className="min-w-0 space-y-5">
+      <fieldset disabled={disabled} className="min-w-0 space-y-5">
         <div className="space-y-2">
           <Checkbox name="remindersEnabled" defaultChecked={s.remindersEnabled} label="Generate reminder schedules for invoices and bills" />
           <Checkbox name="emailNotificationsEnabled" defaultChecked={s.emailNotificationsEnabled} label="Also email reminders to employees (requires an email provider)" hint="In-app notifications are always created." />

@@ -37,7 +37,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
       />
       {p.status === "reversed" && <div className="mb-4"><Notice tone="neutral" title="Reversed">On <DateTimeText value={p.reversedAt} tz={ctx.timezone} /> by {userName(p.reversedById)}: {p.reversalReason}</Notice></div>}
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Card title="Allocations" padded={false}>
             {p.allocations.length === 0 ? <p className="p-4 text-[13.5px] text-muted">Not allocated to any invoice.</p> : (
               <Table>
@@ -67,7 +67,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
             </ol>
           </Card>
         </div>
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Card title="Details">
             <Dl items={[["Amount", <Money key="a" value={fromDecimal(p.amount)} />], ["Unallocated", <Money key="u" value={p.status === "active" ? unallocated : 0n} />], ["Payment date", <DateText key="d" value={p.paymentDate} />], ["Method", p.method], ["Reference", p.reference ?? "—"], ["Recorded by", userName(p.createdById)], ["Recorded at", <DateTimeText key="r" value={p.createdAt} tz={ctx.timezone} />], ["Source", p.importBatchId ? "CSV import" : "Manual entry"]]} />
             {p.notes && <p className="mt-3 rounded-md bg-subtle p-2.5 text-[13px]">{p.notes}</p>}

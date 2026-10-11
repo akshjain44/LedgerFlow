@@ -19,7 +19,7 @@ export default async function MembersPage() {
     ]),
   );
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       {canManage && (
         <Card title="Invite a team member" description="Owners have full access. Finance managers handle all financial records and reports. Staff get only the permissions you tick.">
           <InviteForm isOwner={ctx.role === "owner"} />

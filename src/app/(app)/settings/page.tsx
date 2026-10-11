@@ -9,7 +9,7 @@ export default async function BusinessSettingsPage() {
   const ctx = await requireTenant();
   const { business } = await loadSettingsFor(ctx);
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <Card title="Business details">
         <BusinessForm b={business} disabled={!ctx.permissions.has("settings.manage")} />
       </Card>

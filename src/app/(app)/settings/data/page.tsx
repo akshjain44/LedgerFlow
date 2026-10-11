@@ -6,7 +6,7 @@ export const metadata = { title: "Data & retention" };
 export default async function DataPage() {
   const ctx = await requireTenant();
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <Card title="Data retention & deletion policy">
         <ul className="list-disc space-y-1.5 pl-5 text-[13.5px] text-ink-2">
           <li>Financial history (invoices, payments, allocations, credit notes, write-offs) is never hard-deleted by the application. Corrections are made with reversals, which stay visible.</li>

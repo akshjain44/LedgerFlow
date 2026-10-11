@@ -82,7 +82,7 @@ export async function InvoiceDetail({ ctx, id, direction }: { ctx: TenantContext
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_380px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Card title="Payment history" padded={false} actions={isOpen && can("payments.reverse") ? <AdjustmentDialog invoiceId={inv.id} today={ctx.today} /> : undefined}>
             {inv.allocations.length === 0 && inv.adjustments.length === 0 ? (
               <p className="p-4 text-[13.5px] text-muted">No payments recorded against this {recv ? "invoice" : "bill"} yet.</p>
@@ -239,7 +239,7 @@ export async function InvoiceDetail({ ctx, id, direction }: { ctx: TenantContext
           </Card>
         </div>
 
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Card title="Details">
             <Dl
               cols={2}
@@ -260,7 +260,7 @@ export async function InvoiceDetail({ ctx, id, direction }: { ctx: TenantContext
             {inv.duplicateOverride && <p className="mt-2 text-[12.5px] text-warn">Duplicate number allowed: {inv.duplicateOverride}</p>}
             <div className="mt-4 flex flex-wrap gap-2">
               <LinkButton size="sm" href={`${partyPath}/statement`}><Printer className="h-3.5 w-3.5" />Statement</LinkButton>
-              {inv.lifecycle !== "void" && can("invoices.void") && <ConfirmAction action={voidInvoiceAction} hidden={{ id: inv.id }} label="Void" title={`Void ${inv.invoiceNumber}?`} description="A void invoice is excluded from balances and reminders. It stays on record. Payments must be reversed or reallocated first." reasonLabel="Reason for voiding" />}
+              {inv.lifecycle !== "void" && can("invoices.void") && !inv.allocations.some((a) => a.status === "active") && <ConfirmAction action={voidInvoiceAction} hidden={{ id: inv.id }} label="Void" title={`Void ${inv.invoiceNumber}?`} description="A void invoice is excluded from balances and reminders. It stays on record. Payments must be reversed or reallocated first." reasonLabel="Reason for voiding" />}
             </div>
           </Card>
 

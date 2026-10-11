@@ -47,7 +47,7 @@ export function Importer({ types }: { types: { type: ImportType; label: string; 
   const dups = preview?.results.filter((r) => r.duplicate).length ?? 0;
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <ol className="flex flex-wrap gap-2 text-[12.5px] text-muted" aria-label="Steps">
         {["Choose type", "Upload CSV", "Map columns", "Review rows", "Import"].map((s, i) => {
           const step = summary ? 4 : preview ? 3 : csv ? 2 : 0;

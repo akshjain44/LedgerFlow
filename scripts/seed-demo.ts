@@ -158,7 +158,7 @@ async function main() {
     await comm(godavari, [g1.id, g2.id], 3, "payment_promised", "Accounts head confirmed RTGS next week for INV-2401 balance.", fm.id);
     await promise(godavari, [g1.id], "254000.00", 3, 4, "Month-end collections from their customers");
     await comm(krishna, [k1.id], 9, "part_payment_received", "Cheque collected for 1,36,000; balance promised today.");
-    await promise(krishna, [k1.id], "100000.00", 9, 0, "Balance after part payment");
+    await promise(krishna, [k1.id], "100000.00", 7, 0, "Balance after part payment");
     await promise(musi, [m1.id], "200000.00", 10, -4, "Partial against INV-2408");
     // Nizam: dispute on short delivery. Banjara: bounced cheque, never re-contacted.
     await comm(nizam, [n1.id], 30, "delivery_dispute", "Claims 400 kg short on DC-401. Asked for weighbridge slip.");

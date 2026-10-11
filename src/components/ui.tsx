@@ -27,7 +27,7 @@ export function buttonClass(variant: Variant = "secondary", size: Size = "md") {
 
 export function Card({ className, children, title, actions, description, padded = true }: { className?: string; children: ReactNode; title?: ReactNode; actions?: ReactNode; description?: ReactNode; padded?: boolean }) {
   return (
-    <section className={cn("rounded-[var(--radius-card)] border border-line bg-surface shadow-[0_1px_2px_rgba(22,32,46,0.04)]", className)}>
+    <section className={cn("min-w-0 rounded-[var(--radius-card)] border border-line bg-surface shadow-[0_1px_2px_rgba(22,32,46,0.04)]", className)}>
       {(title || actions) && (
         <header className="flex flex-wrap items-start justify-between gap-2 border-b border-line px-4 py-3">
           <div>

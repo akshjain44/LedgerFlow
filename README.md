@@ -106,7 +106,7 @@ Integration tests run against a real PostgreSQL database as the restricted app r
 
 | Suite | Covers |
 |---|---|
-| `tests/unit/domain.test.ts` (39) | Money parsing and formatting, timezone dates, invoice status, ageing buckets, allocation rules, promise evaluation, priority scoring, reminder scheduling and backoff, permissions, CSV formula-injection escaping |
+| `tests/unit/domain.test.ts` (37) | Money parsing and formatting, timezone dates, invoice status, ageing buckets, allocation rules, promise evaluation, priority scoring, reminder scheduling and backoff, permissions, CSV formula-injection escaping |
 | `tests/integration/acceptance.test.ts` (17) | Acceptance scenarios 1–9 at the service and database layer, including database-level rejection of over-allocation, deletion and cross-tenant writes |
 | `tests/integration/validation.test.ts` (7) | Malformed input, privilege escalation, last-owner protection, document sniffing and tenant scope, signed-link binding, append-only audit log |
 | `tests/e2e/acceptance.mjs` (11 steps) | Real browser: onboarding, scenarios 1–6 and 8–10 through the UI, document upload and download, phone-width layout with no horizontal overflow |

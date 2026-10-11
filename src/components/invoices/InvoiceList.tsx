@@ -36,7 +36,7 @@ export async function InvoiceList({ ctx, direction, sp }: { ctx: TenantContext; 
         }
       />
       <div className="mb-3">
-        <FilterChips path={path} params={params} options={INVOICE_FILTERS[direction]} current={sp.filter ?? ""} />
+        <FilterChips path={path} params={params} options={INVOICE_FILTERS[direction]} current={sp.filter ?? "open"} />
       </div>
       <MobileFilters active={!!(sp.q || sp.counterpartyId || sp.assignee || sp.bucket || sp.min || sp.max || sp.priority)}>
       <form action={path} className="no-print mb-4 grid gap-2 rounded-lg border border-line bg-surface p-3 sm:grid-cols-2 lg:grid-cols-6" role="search">

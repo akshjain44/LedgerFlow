@@ -79,7 +79,8 @@ export function invoiceWhere(direction: InvoiceDirection, p: InvoiceListParams, 
     case "draft": and.push({ lifecycle: "draft" }); break;
     case "void": and.push({ lifecycle: "void" }); break;
     case "all": break;
-    default: and.push({ lifecycle: { not: "void" } });
+    // Default working view: invoices that still have money outstanding.
+    default: and.push(OPEN_WITH_BALANCE);
   }
   if (p.bucket) {
     const ranges: Record<string, [number, number | null]> = { d1_30: [1, 30], d31_60: [31, 60], d61_90: [61, 90], d90_plus: [91, null] };

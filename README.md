@@ -125,7 +125,8 @@ Integration tests run against a real PostgreSQL database as the restricted app r
 - Under Storage, create a bucket named `documents` and leave **Public** off.
 - Supabase's direct host only accepts IPv6, and Vercel connects over IPv4, so use the **pooler** for both connections:
   - `DIRECT_URL` (migrations): the **session** pooler on port 5432, `postgresql://postgres.<ref>:<db-password>@aws-0-<region>.pooler.supabase.com:5432/postgres`
-  - `DATABASE_URL` (runtime): the **transaction** pooler on port 6543 as the app role, `postgresql://ledgerflow_app.<ref>:<app-password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1`
+  - `DATABASE_URL` (runtime): the **transaction** pooler on port 6543 as the app role, `postgresql://ledgerflow_app.<ref>:<app-password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=5`. Pages run several short transactions in parallel; `connection_limit=1` serialises them and makes pages very slow.
+- Run the app in the same region as the database. `vercel.json` pins functions to `bom1` (Mumbai) to match a Supabase project in `ap-south-1`; change both if you use another region.
 - Migration `…_supabase_hardening` revokes Supabase's default `anon`/`authenticated` grants, so publishable keys cannot reach any table through the Data API.
 
 **2. Vercel**

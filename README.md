@@ -112,15 +112,27 @@ Integration tests run against a real PostgreSQL database as the restricted app r
 | `tests/integration/validation.test.ts` (7) | Malformed input, privilege escalation, last-owner protection, document sniffing and tenant scope, signed-link binding, append-only audit log |
 | `tests/e2e/acceptance.mjs` (11 steps) | Real browser: onboarding, scenarios 1–6 and 8–10 through the UI, document upload and download, phone-width layout with no horizontal overflow |
 
-## Deployment
+## Deployment (Supabase + Vercel)
 
-1. **PostgreSQL** (Supabase, Neon, RDS or self-hosted): run `npm run db:migrate` with `DIRECT_URL` set to the owner role, then give `ledgerflow_app` a login and password and use it in `DATABASE_URL`. On Supabase, connect through the pooler using the custom role. Transaction pooling is supported because the tenant setting is transaction-local.
-2. **App**: `npm run build && npm start` on any Node host, or deploy to Vercel. Set all environment variables. Never expose `DIRECT_URL` or `SESSION_SECRET` to the browser; none are `NEXT_PUBLIC_`.
-3. **Scheduler**: `vercel.json` calls `/api/cron/reminders` hourly. Vercel sends `Authorization: Bearer $CRON_SECRET` automatically; hourly crons need a paid plan, while the Hobby plan runs daily. Elsewhere, call the endpoint with that header from any scheduler, or run `npm run reminders:run` hourly.
-4. **Documents**: by default, files are written to `STORAGE_DIR` on local disk. On Vercel or any serverless host, set `STORAGE_PROVIDER=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_STORAGE_BUCKET`, and create that bucket as **private** in Supabase. The app still serves every file itself, after its own membership and signed-link checks. The adapter's requests are unit-tested against a fake server; it has not yet been run against a live Supabase project.
-5. **Email**: set the SMTP variables, and Settings → Integrations shows the status.
+`npm run vercel-build` runs `prisma migrate deploy` before `next build`, so every Vercel deploy applies pending migrations.
 
-No deployment was performed from this environment because there are no hosting or database credentials.
+**1. Supabase**
+- In the SQL editor, create the application role before the first deploy:
+  ```sql
+  CREATE ROLE ledgerflow_app LOGIN PASSWORD 'a-long-random-password';
+  ```
+  The migrations grant it exactly what it needs. Do not use `postgres` or the `service_role` key at runtime: Row Level Security does not apply to them.
+- Under Storage, create a bucket named `documents` and leave **Public** off.
+- Supabase's direct host only accepts IPv6, and Vercel connects over IPv4, so use the **pooler** for both connections:
+  - `DIRECT_URL` (migrations): the **session** pooler on port 5432, `postgresql://postgres.<ref>:<db-password>@aws-0-<region>.pooler.supabase.com:5432/postgres`
+  - `DATABASE_URL` (runtime): the **transaction** pooler on port 6543 as the app role, `postgresql://ledgerflow_app.<ref>:<app-password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1`
+- Migration `…_supabase_hardening` revokes Supabase's default `anon`/`authenticated` grants, so publishable keys cannot reach any table through the Data API.
+
+**2. Vercel**
+- Import the repository and keep the default framework settings. Set these environment variables: `DATABASE_URL`, `DIRECT_URL`, `SESSION_SECRET`, `CRON_SECRET`, `STORAGE_PROVIDER=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET=documents`, `APP_URL` (your production URL), and optionally the `SMTP_*` and `EMAIL_FROM` variables.
+- `vercel.json` schedules the reminder processor daily at 03:30 UTC (09:00 IST), the most the Hobby plan allows. On Pro, change it to hourly (`5 * * * *`). Vercel sends `Authorization: Bearer $CRON_SECRET` automatically.
+
+**3. Other hosts:** run `npm run db:migrate`, then `npm run build && npm start`, and call `/api/cron/reminders` hourly with the bearer token (or run `npm run reminders:run`). Without Supabase Storage, set `STORAGE_DIR` to a persistent volume.
 
 ## How it works
 

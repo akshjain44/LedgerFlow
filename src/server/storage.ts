@@ -41,12 +41,75 @@ export const localStorage: StorageProvider = {
   },
 };
 
+const MIME: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", webp: "image/webp" };
+
+/**
+ * Supabase Storage over its REST API, using the service-role key on the server
+ * only. The bucket must be PRIVATE; files are never served from Supabase
+ * directly — the app streams them after its own membership and signature checks.
+ */
+export function supabaseStorage(opts: { url: string; serviceKey: string; bucket: string; fetchImpl?: typeof fetch }): StorageProvider {
+  const base = opts.url.replace(/\/$/, "") + "/storage/v1/object";
+  const f = opts.fetchImpl ?? fetch;
+  const headers = { Authorization: `Bearer ${opts.serviceKey}`, apikey: opts.serviceKey };
+  const objectUrl = (key: string) => {
+    if (!KEY_RE.test(key)) throw new Error("Invalid storage key");
+    return `${base}/${encodeURIComponent(opts.bucket)}/${key}`;
+  };
+  const fail = async (op: string, res: Response) => {
+    const body = (await res.text().catch(() => "")).slice(0, 200);
+    throw new Error(`Supabase Storage ${op} failed (${res.status}): ${body}`);
+  };
+  return {
+    name: "supabase-storage",
+    async put(key, data) {
+      const res = await f(objectUrl(key), {
+        method: "POST",
+        headers: { ...headers, "Content-Type": MIME[key.split(".").pop()!] ?? "application/octet-stream", "x-upsert": "false" },
+        body: new Uint8Array(data),
+      });
+      if (!res.ok) await fail("upload", res);
+    },
+    async get(key) {
+      const res = await f(objectUrl(key), { headers });
+      if (!res.ok) await fail("download", res);
+      return Buffer.from(await res.arrayBuffer());
+    },
+    async remove(key) {
+      objectUrl(key);
+      const res = await f(`${base}/${encodeURIComponent(opts.bucket)}`, {
+        method: "DELETE",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ prefixes: [key] }),
+      });
+      if (!res.ok && res.status !== 404) await fail("delete", res);
+    },
+  };
+}
+
+function supabaseConfig() {
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "documents";
+  return { url, serviceKey, bucket, missing: [!url && "SUPABASE_URL", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY"].filter(Boolean) as string[] };
+}
+
+/** STORAGE_PROVIDER=supabase uses Supabase Storage; anything else uses the local private directory. */
 export function storage(): StorageProvider {
+  if (process.env.STORAGE_PROVIDER === "supabase") {
+    const c = supabaseConfig();
+    if (c.missing.length) throw new Error(`Supabase Storage is selected but ${c.missing.join(", ")} is not set`);
+    return supabaseStorage({ url: c.url!, serviceKey: c.serviceKey!, bucket: c.bucket });
+  }
   return localStorage;
 }
 
 export function storageStatus() {
-  return { provider: "Local private directory", dir: rootDir() };
+  if (process.env.STORAGE_PROVIDER === "supabase") {
+    const c = supabaseConfig();
+    return { provider: "Supabase Storage (private bucket)", dir: `bucket “${c.bucket}”`, missing: c.missing };
+  }
+  return { provider: "Local private directory", dir: rootDir(), missing: [] as string[] };
 }
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;

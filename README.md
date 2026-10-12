@@ -28,7 +28,7 @@ LedgerFlow answers five daily questions: who owes us and how much, whom we owe, 
 | WhatsApp / SMS | ❌ not integrated. "Prepare message" lets staff copy reviewed text; nothing is reported as sent |
 | Dashboard with defined metrics; reports (ageing as of any date, customer outstanding, supplier obligations, collections effectiveness, follow-up productivity, cash-flow outlook); CSV export; printable statements | ✅ |
 | CSV import (customers, suppliers, invoices, bills, payments) with mapping, row-level errors, duplicate detection, file fingerprinting and a per-row outcome log | ✅ tested |
-| Private document storage with content sniffing and signed, user-bound, time-limited links | ✅ (local private directory; see Deployment) |
+| Private document storage with content sniffing and signed, user-bound, time-limited links | ✅ local directory or a Supabase Storage private bucket (see Deployment) |
 | Append-only audit log of material events | ✅ enforced by a database trigger |
 | Demo mode (separate fictional business) | ✅ |
 | Supplier GSTIN verification, invoice reconciliation, AI assistance | ❌ not implemented. Integration boundaries are documented below; nothing is simulated |
@@ -88,7 +88,8 @@ See `.env.example`, which documents every variable.
 | `NEXT_PUBLIC_APP_NAME` | Product name shown in the UI |
 | `SESSION_SECRET` | 32+ characters; signs document links |
 | `CRON_SECRET` | Bearer token for `/api/cron/reminders` |
-| `STORAGE_DIR` | Private directory for uploaded documents |
+| `STORAGE_DIR` | Private directory for uploaded documents (local provider) |
+| `STORAGE_PROVIDER`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` | Use Supabase Storage instead (required on Vercel) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`, `EMAIL_FROM` | Optional email |
 | `TEST_DATABASE_URL`, `TEST_DIRECT_URL` | Integration-test database |
 
@@ -116,7 +117,7 @@ Integration tests run against a real PostgreSQL database as the restricted app r
 1. **PostgreSQL** (Supabase, Neon, RDS or self-hosted): run `npm run db:migrate` with `DIRECT_URL` set to the owner role, then give `ledgerflow_app` a login and password and use it in `DATABASE_URL`. On Supabase, connect through the pooler using the custom role. Transaction pooling is supported because the tenant setting is transaction-local.
 2. **App**: `npm run build && npm start` on any Node host, or deploy to Vercel. Set all environment variables. Never expose `DIRECT_URL` or `SESSION_SECRET` to the browser; none are `NEXT_PUBLIC_`.
 3. **Scheduler**: `vercel.json` calls `/api/cron/reminders` hourly. Vercel sends `Authorization: Bearer $CRON_SECRET` automatically; hourly crons need a paid plan, while the Hobby plan runs daily. Elsewhere, call the endpoint with that header from any scheduler, or run `npm run reminders:run` hourly.
-4. **Documents**: the default storage provider writes to `STORAGE_DIR` on local disk. Serverless hosts need a persistent volume, or an S3 or Supabase Storage implementation of the `StorageProvider` interface in `src/server/storage.ts`, which is about 30 lines.
+4. **Documents**: by default, files are written to `STORAGE_DIR` on local disk. On Vercel or any serverless host, set `STORAGE_PROVIDER=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_STORAGE_BUCKET`, and create that bucket as **private** in Supabase. The app still serves every file itself, after its own membership and signed-link checks. The adapter's requests are unit-tested against a fake server; it has not yet been run against a live Supabase project.
 5. **Email**: set the SMTP variables, and Settings → Integrations shows the status.
 
 No deployment was performed from this environment because there are no hosting or database credentials.
